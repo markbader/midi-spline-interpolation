@@ -1,0 +1,2 @@
+miditoolkit==0.1.14
+scipy==1.7.1
