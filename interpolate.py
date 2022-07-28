@@ -65,29 +65,35 @@ def write_midi(filepath: Path, notes):
     mido_obj.dump(filepath)
 
 def f(x: float, x_points, y_points):
-    tck = interpolate.splrep(x_points, y_points, s=35)
+    tck = interpolate.splrep(x_points, y_points, s=25)
     return interpolate.splev(x, tck)
 
-def get_closest_note(notes, idx, num_notes):
-    # TODO: define better function to approximate note calculation
-    rel_time = idx/num_notes
-    #print(notes)
-    derivation = []
-    for time in notes:
-        derivation.extend([time]*notes[time][0])
-    best_time = derivation[int(len(derivation) * rel_time)]
-    return [best_time, notes[best_time][0], notes[best_time][1]]
-    print(derivation)
-    current_min = list(notes.keys())[0]
-    for time in notes:
-        if abs(time - rel_time) < abs(current_min - rel_time):
-            current_min = time
-    return [current_min, notes[current_min][0], notes[current_min][1]]
+def nearest_note_length(aprox_note_length):
+    assert quarter_length != None, 'Quarter length not defined.'
+    note_lenghts = [quarter_length // 4, quarter_length // 2, quarter_length, quarter_length * 2, quarter_length * 4]
+    nearest = quarter_length
+    for length in note_lenghts:
+        if abs(length - aprox_note_length) < abs(nearest - aprox_note_length):
+            nearest = length
+    return nearest
+
+def nearest_start(aprox_note_start):
+    assert quarter_length != None, 'Quarter length not defined.'
+    note_lenghts = [quarter_length * 4, quarter_length * 2, quarter_length, quarter_length // 2]
+    nearest = 0
+    for length in note_lenghts:
+        position = (aprox_note_start // length) * length
+        nearest += position
+        aprox_note_start -= position
+    return nearest
 
 
 def main(begin: Path, end: Path, length: int, outfile: Path) -> None:
     begin_notes = read_notes(begin)
     end_notes = read_notes(end)
+
+    begin_bars = begin_notes[-1].start // bar_length + 1
+    end_bars = end_notes[-1].start // bar_length + 1
 
     begin_melody = extract_melody(begin_notes)
     end_melody = extract_melody(end_notes)
@@ -98,22 +104,32 @@ def main(begin: Path, end: Path, length: int, outfile: Path) -> None:
     x_points = []
     y_points = []
 
+    begin_note_count = 0
     for note in begin_melody:
         x_points.append(int(note.start))
         y_points.append(int(note.pitch))
+        bar_nr = note.start // bar_length
+        if bar_nr == begin_bars - 1:
+            begin_note_count += 1
 
     end_of_begin = begin_melody[-1].end
     space = length * quarter_length * 4
     begin_of_end = end_of_begin + space
 
+    x_points.append(end_of_begin+space//2)
+    y_points.append((y_points[-1] + end_melody[0].pitch)//2)
+
+    end_note_count = 0
     for note in end_melody:
         x_points.append(int(note.start) + begin_of_end)
         y_points.append(int(note.pitch))
+        bar_nr = note.start // bar_length
+        if bar_nr == 0:
+            end_note_count += 1
 
 
     # Analyze note length, beats and velocity
     notes_end_of_begin = {}
-    begin_bars = begin_notes[-1].start // bar_length + 1
     for note in begin_notes:
         bar_nr = note.start // bar_length
         if bar_nr != begin_bars - 1:
@@ -121,7 +137,6 @@ def main(begin: Path, end: Path, length: int, outfile: Path) -> None:
         notes_end_of_begin[note.start % bar_length] = [int(note.end - note.start), note.velocity]
 
     notes_begin_of_end = {}
-    end_bars = end_notes[-1].start // bar_length + 1
     for note in end_notes:
         note.start += begin_of_end
         note.end += begin_of_end
@@ -134,20 +149,56 @@ def main(begin: Path, end: Path, length: int, outfile: Path) -> None:
     # Combine begin, generated transition and end to a single stream of notes
     result.extend(begin_notes)
 
-    print(begin_bars)
-    print(end_bars)
     # Create transition
     for bar_nr in range(1, length + 1):
         rel_position = bar_nr / (length + 1)
-        num_notes = int(rel_position * len(notes_begin_of_end) + (1 - rel_position) * len(notes_end_of_begin))
+        num_notes = int(rel_position * end_note_count + (1 - rel_position) * begin_note_count)
+
+        # calculate for each note how long it should be
         for i in range(num_notes):
-            close_begin_note = get_closest_note(notes_end_of_begin, i, num_notes)
-            close_end_note = get_closest_note(notes_begin_of_end, i, num_notes)
-            note_start = (begin_bars + bar_nr - 1) * bar_length + rel_position * close_end_note[0] + (1 - rel_position) * close_begin_note[0]
-            note_length = rel_position * close_end_note[1] + (1 - rel_position) * close_begin_note[1]
-            note_velocity = rel_position * close_end_note[2] + (1 - rel_position) * close_begin_note[2]
-            note_pitch = int(f(note_start, x_points, y_points))
-            result.append(ct.Note(int(note_velocity), int(note_pitch), int(note_start), int(note_start + note_length)))
+            current_interval = range(i * bar_length // num_notes, (i + 1) * bar_length // num_notes)
+            avg_start_begin = 0
+            avg_length_begin = 0
+            avg_velocity_begin = 0
+            counter = 0
+            for time, note in notes_end_of_begin.items():
+                note_interval = range(time, time + note[0])
+                if bool(set(note_interval).intersection(current_interval)):
+                    avg_start_begin += time
+                    avg_length_begin += note[0]
+                    avg_velocity_begin += note[1]
+                    counter += 1
+            if counter:
+                avg_start_begin //= counter
+                avg_length_begin //= counter
+                avg_velocity_begin //= counter
+
+            avg_start_end = 0
+            avg_length_end = 0
+            avg_velocity_end = 0
+            counter = 0
+            for time, note in notes_begin_of_end.items():
+                note_interval = range(time, time + note[0])
+                if bool(set(note_interval).intersection(current_interval)):
+                    avg_start_end += time
+                    avg_length_end += note[0]
+                    avg_velocity_end += note[1]
+                    counter += 1
+            if counter:
+                avg_start_end //= counter
+                avg_length_end //= counter
+                avg_velocity_end //= counter
+
+            aprox_note_start = int(rel_position * avg_start_end + (1 - rel_position) * avg_start_begin)
+            aprox_note_length = int(rel_position * avg_length_end + (1 - rel_position) * avg_length_begin)
+            aprox_note_velocity = int(rel_position * avg_velocity_end + (1 - rel_position) * avg_velocity_begin)
+
+            # map aproximated values to actual note lengths
+            note_length = nearest_note_length(aprox_note_length)
+            note_start = nearest_start(aprox_note_start) + (begin_bars + bar_nr - 1) * bar_length
+            note_pitch = int(f(note_start + note_length//2, x_points, y_points))
+
+            result.append(ct.Note(int(aprox_note_velocity), int(note_pitch), int(note_start), int(note_start + note_length)))
 
     result.extend(end_notes)
 
@@ -160,8 +211,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--begin', type=Path, default="begin_orig.mid")
     parser.add_argument('--end', type=Path, default="end_orig.mid")
-    parser.add_argument('--outfile', type=Path, default='result3.mid')
-    parser.add_argument('--length', type=int, default=8)
+    parser.add_argument('--outfile', type=Path, default='result.mid')
+    parser.add_argument('--length', type=int, default=4)
 
     args = parser.parse_args()
 
