@@ -5,6 +5,7 @@ from pathlib import Path
 
 from miditoolkit.midi import parser as mid_parser
 from miditoolkit.midi import containers as ct
+import random
 
 quarter_length = None
 bar_length = None
@@ -88,7 +89,7 @@ def nearest_start(aprox_note_start):
     return nearest
 
 
-def main(begin: Path, end: Path, length: int, outfile: Path) -> None:
+def main(begin: Path, end: Path, length: int, outfile: Path, append_middle_handle: bool=True) -> None:
     begin_notes = read_notes(begin)
     end_notes = read_notes(end)
 
@@ -116,8 +117,9 @@ def main(begin: Path, end: Path, length: int, outfile: Path) -> None:
     space = length * quarter_length * 4
     begin_of_end = end_of_begin + space
 
-    x_points.append(end_of_begin+space//2)
-    y_points.append((y_points[-1] + end_melody[0].pitch)//2)
+    if append_middle_handle:
+        x_points.append(end_of_begin+space//2)
+        y_points.append((y_points[-1] + end_melody[0].pitch)//2)
 
     end_note_count = 0
     for note in end_melody:
