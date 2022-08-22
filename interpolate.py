@@ -3,14 +3,26 @@ from scipy import interpolate
 import argparse
 from pathlib import Path
 
-from music21 import converter, note, chord, stream, midi
+from music21 import converter, note, chord, stream, midi, interval, pitch, harmony
 
 class MusicalFeatures:
     def __init__(self, input_stream):
-        self.stream = input_stream
+        self.init_stream(input_stream)
 
         self.extract_musical_features()
         self.melodies = [self.extract_melody(i) for i in range(self.polyphony)]
+
+    def init_stream(self, input_stream: stream.Stream):
+
+        key = input_stream.analyze('key')
+
+        if key.mode == "major":
+            target_interval = interval.Interval(key.tonic, pitch.Pitch('C'))
+
+        else:
+            target_interval = interval.Interval(key.tonic, pitch.Pitch('A'))
+
+        self.stream = input_stream.transpose(target_interval)
 
     def extract_musical_features(self) -> None:
         bar_length = self.stream.timeSignature.barDuration.quarterLength
@@ -18,19 +30,24 @@ class MusicalFeatures:
         num_notes = 0
         polyphony = 0
         velocity = 0
+        avg_pitch = 0
         for element in self.stream:
             if isinstance(element, note.Note):
                 num_notes += 1
                 polyphony += 1
                 velocity += element.volume.velocity
+                avg_pitch += element.pitch.midi
             if isinstance(element, chord.Chord):
                 num_notes += 1
                 polyphony += len(element.notes)
                 velocity += element.volume.velocity
+                for n in element.notes:
+                    avg_pitch += n.pitch.midi
 
         self.notes_per_bar = round(num_notes / num_bars)
         self.polyphony = round(polyphony / num_notes)
         self.velocity = round(velocity / num_notes)
+        self.avg_pitch = round(avg_pitch / polyphony)
 
     def extract_melody(self, number: int) -> stream.Stream:
         melody = stream.Stream()
@@ -55,7 +72,7 @@ class MidiInterpolator:
 
         self.read_notes()
 
-        # Combine all streams and their transitions to a single musical stream
+        # Combine all streams and their transitions to a single stream
         for i in range(len(self.streams) - 1):
             self.current_stream = MusicalFeatures(self.streams[i])
             self.next_stream = MusicalFeatures(self.streams[i + 1])
@@ -94,12 +111,16 @@ class MidiInterpolator:
                 offset = self.output_stream.duration.quarterLength
                 if polyphony <= 1:
                     # interpolate pitch from spline function and map it to white key
-                    pitch = int(interpolate.splev(float(offset), interpolation_curves[0]))
-                    white = [0,2,4,5,7,9,11]
-                    if pitch % 12 not in white:
-                        pitch += 1
+                    interpolated_melody = 0
+                    melody1 = int(interpolate.splev(4.0 - float(offset), interpolation_curves[0])) - self.current_stream.avg_pitch
+                    melody2 = int(interpolate.splev(4.0 - float(offset), interpolation_curves[0])) - self.current_stream.avg_pitch
 
-                    newNote = note.Note(pitch)
+                    note_pitch = int(interpolate.splev(float(offset), interpolation_curves[0])) + interpolated_melody
+                    white = [0,2,4,5,7,9,11]
+                    if note_pitch % 12 not in white:
+                        note_pitch += 1
+
+                    newNote = note.Note(note_pitch)
                     newNote.volume.velocity = velocity
                     newNote.duration.quarterLength = duration
                     self.output_stream.append(newNote)
@@ -144,7 +165,7 @@ class MidiInterpolator:
                 x_points.append(note.offset + begin_of_end)
                 y_points.append(note.pitch.midi)
 
-            curves.append(interpolate.splrep(x_points, y_points, s=30))
+            curves.append(interpolate.splrep(x_points, y_points, s=12))
         return curves
 
 if __name__ == "__main__":
