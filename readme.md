@@ -11,5 +11,5 @@ pip install -r requirement.txt
 
 ## Run the script
 ```
-python3 interpolate.py --begin begin_orig.mid --end end_orig.mid --length 3
+python3 interpolate.py --files begin_orig.mid end_orig.mid --length 3
 ```
