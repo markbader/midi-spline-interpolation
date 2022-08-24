@@ -1,2 +1,2 @@
-miditoolkit==0.1.14
-scipy==1.7.1
+scipy==1.9.0
+music21==7.3.3

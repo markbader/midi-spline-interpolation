@@ -12,8 +12,8 @@ class MusicalFeatures:
         self.extract_musical_features()
         self.melodies = [self.extract_melody(i) for i in range(self.polyphony)]
 
-    def init_stream(self, input_stream: stream.Stream):
-
+    def init_stream(self, input_stream: stream.Stream) -> None:
+        '''Load input stream to self.stream and transpose it to a keyset with only white keys'''
         key = input_stream.analyze('key')
 
         if key.mode == "major":
@@ -84,10 +84,6 @@ class MidiInterpolator:
         self.output_stream.append(self.next_stream.stream)
 
         self.output_stream.write('midi', self.outfile)
-
-        # how it sounds
-        sp = midi.realtime.StreamPlayer(self.output_stream)
-        sp.play()
 
     def read_notes(self) -> None:
         self.streams = []
