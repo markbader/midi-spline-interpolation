@@ -22,7 +22,7 @@ class MusicalFeatures:
         else:
             target_interval = interval.Interval(key.tonic, pitch.Pitch('A'))
 
-        self.stream = input_stream.transpose(target_interval)
+        self.stream: stream.Stream = input_stream.transpose(target_interval)
 
     def extract_musical_features(self) -> None:
         bar_length = self.stream.timeSignature.barDuration.quarterLength
@@ -65,9 +65,7 @@ class MidiInterpolator:
         self.transition_length = length
         self.outfile = outfile
 
-        self.main()
-
-    def main(self) -> None:
+    def create_infilling(self) -> None:
         self.output_stream = stream.Stream()
 
         self.read_notes()
@@ -92,24 +90,33 @@ class MidiInterpolator:
             file = converter.parse(filepath)
             self.streams.append(file.flatten())
 
-    def calc(self, param: str, bar_nr: int) -> int:
+    def calc(self, bar_nr: int, param: str=None, x1: float=None, x2: float=None) -> int:
         rel_position = bar_nr / (self.transition_length + 1)
-        return round(rel_position * getattr(self.next_stream, param) + (1 - rel_position) * getattr(self.current_stream, param))
+        if param:
+            x1 = getattr(self.current_stream, param)
+            x2 = getattr(self.next_stream, param)
+        if x1 != None and x2 != None:
+            return round(rel_position * x2 + (1 - rel_position) * x1)
 
-    def generate_transition(self):
+    def generate_transition(self, melody_factor: float=0.8):
         interpolation_curves = self.generate_interpolation_curves()
+        duration1 = self.current_stream.stream.duration.quarterLength
+        duration2 = self.next_stream.stream.duration.quarterLength
+        start2 = duration1 + self.transition_length * 4.0
         for bar_nr in range(1, self.transition_length + 1):
-            num_notes = self.calc('notes_per_bar', bar_nr)
-            polyphony = self.calc('polyphony', bar_nr)
-            velocity = self.calc('velocity', bar_nr)
+            num_notes = self.calc(bar_nr, param='notes_per_bar')
+            polyphony = self.calc(bar_nr, param='polyphony')
+            velocity = self.calc(bar_nr, param='velocity')
             duration = 4 / num_notes
             for _ in range(num_notes):
                 offset = self.output_stream.duration.quarterLength
+                position1 = offset % duration1
+                position2 = start2 + (start2 + offset) % duration2
                 if polyphony <= 1:
                     # interpolate pitch from spline function and map it to white key
-                    interpolated_melody = 0
-                    melody1 = int(interpolate.splev(4.0 - float(offset), interpolation_curves[0])) - self.current_stream.avg_pitch
-                    melody2 = int(interpolate.splev(4.0 - float(offset), interpolation_curves[0])) - self.current_stream.avg_pitch
+                    melody1 = round((interpolate.splev(position1, interpolation_curves[0]) - self.current_stream.avg_pitch) * melody_factor)
+                    melody2 = round((interpolate.splev(position2, interpolation_curves[0]) - self.next_stream.avg_pitch) * melody_factor)
+                    interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
 
                     note_pitch = int(interpolate.splev(float(offset), interpolation_curves[0])) + interpolated_melody
                     white = [0,2,4,5,7,9,11]
@@ -124,7 +131,10 @@ class MidiInterpolator:
                     newChord = chord.Chord()
                     for i in range(polyphony):
                         # interpolate pitch from spline function and map it to white key
-                        pitch = int(interpolate.splev(float(offset), interpolation_curves[i]))
+                        melody1 = round((interpolate.splev(position1, interpolation_curves[i]) - self.current_stream.avg_pitch) * melody_factor)
+                        melody2 = round((interpolate.splev(position2, interpolation_curves[i]) - self.next_stream.avg_pitch) * melody_factor)
+                        interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
+                        pitch = int(interpolate.splev(float(offset), interpolation_curves[i])) + interpolated_melody
                         white = [0, 2, 4, 5, 7, 9, 11]
                         if pitch % 12 not in white:
                             pitch += 1
@@ -161,7 +171,7 @@ class MidiInterpolator:
                 x_points.append(note.offset + begin_of_end)
                 y_points.append(note.pitch.midi)
 
-            curves.append(interpolate.splrep(x_points, y_points, s=12))
+            curves.append(interpolate.splrep(x_points, y_points, s=25))
         return curves
 
 if __name__ == "__main__":
@@ -173,4 +183,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    MidiInterpolator(args.files, args.length, args.outfile)
+    midi_interpolator = MidiInterpolator(args.files, args.length, args.outfile)
+    midi_interpolator.create_infilling()
+    

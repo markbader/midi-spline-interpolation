@@ -1,6 +1,6 @@
 # Music transition generation with cubic spline function
 
-This comand line script takes two MIDI files as Input and generates a transition based on a calculated cubic spline function.
+This command line script takes two MIDI files as Input and generates a transition based on a calculated cubic spline function.
 
 ## Installation
 ```
