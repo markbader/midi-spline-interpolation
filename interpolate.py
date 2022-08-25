@@ -3,7 +3,7 @@ from scipy import interpolate
 import argparse
 from pathlib import Path
 
-from music21 import converter, note, chord, stream, midi, interval, pitch, harmony
+from music21 import converter, note, chord, stream, interval, pitch, tempo
 
 class MusicalFeatures:
     def __init__(self, input_stream):
@@ -26,25 +26,42 @@ class MusicalFeatures:
 
     def extract_musical_features(self) -> None:
         bar_length = self.stream.timeSignature.barDuration.quarterLength
-        num_bars = self.stream.duration.quarterLength // bar_length
+        self.num_bars = self.stream.duration.quarterLength // bar_length
+        self.length = self.stream.duration.quarterLength
         num_notes = 0
         polyphony = 0
         velocity = 0
         avg_pitch = 0
+        avg_tempo = 0
+        self.first_bar = stream.Stream()
+        self.last_bar = stream.Stream()
         for element in self.stream:
             if isinstance(element, note.Note):
                 num_notes += 1
                 polyphony += 1
                 velocity += element.volume.velocity
                 avg_pitch += element.pitch.midi
+                if element.offset < bar_length:
+                    self.first_bar.append(element)
+                if element.offset >= self.length - bar_length:
+                    self.last_bar.append(element)
             if isinstance(element, chord.Chord):
                 num_notes += 1
                 polyphony += len(element.notes)
                 velocity += element.volume.velocity
                 for n in element.notes:
                     avg_pitch += n.pitch.midi
-
-        self.notes_per_bar = round(num_notes / num_bars)
+                if element.offset < bar_length:
+                    self.first_bar.append(element)
+                if element.offset >= self.length - bar_length:
+                    self.last_bar.append(element)
+            if isinstance(element, tempo.MetronomeMark):
+                avg_tempo = element.number
+        if avg_tempo == 0:
+            avg_tempo = 120 # use 120 BPM as a default tempo
+        
+        self.notes_per_bar = round(num_notes / self.num_bars)
+        self.avg_tempo = avg_tempo
         self.polyphony = round(polyphony / num_notes)
         self.velocity = round(velocity / num_notes)
         self.avg_pitch = round(avg_pitch / polyphony)
@@ -98,16 +115,18 @@ class MidiInterpolator:
         if x1 != None and x2 != None:
             return round(rel_position * x2 + (1 - rel_position) * x1)
 
-    def generate_transition(self, melody_factor: float=0.8):
+    def generate_transition(self, melody_factor: float=1.2):
         interpolation_curves = self.generate_interpolation_curves()
-        duration1 = self.current_stream.stream.duration.quarterLength
-        duration2 = self.next_stream.stream.duration.quarterLength
+        duration1 = self.current_stream.length
+        duration2 = self.next_stream.length
         start2 = duration1 + self.transition_length * 4.0
         for bar_nr in range(1, self.transition_length + 1):
             num_notes = self.calc(bar_nr, param='notes_per_bar')
             polyphony = self.calc(bar_nr, param='polyphony')
             velocity = self.calc(bar_nr, param='velocity')
+            avg_tempo = self.calc(bar_nr, param='avg_tempo')
             duration = 4 / num_notes
+            self.output_stream.append(tempo.MetronomeMark(number=avg_tempo))
             for _ in range(num_notes):
                 offset = self.output_stream.duration.quarterLength
                 position1 = offset % duration1
