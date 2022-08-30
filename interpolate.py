@@ -25,14 +25,14 @@ class MusicalFeatures:
         self.stream: stream.Stream = input_stream.transpose(target_interval)
 
     def extract_musical_features(self) -> None:
-        bar_length = self.stream.timeSignature.barDuration.quarterLength
-        self.num_bars = self.stream.duration.quarterLength // bar_length
+        self.bar_length = self.stream.timeSignature.barDuration.quarterLength
+        self.num_bars = self.stream.duration.quarterLength // self.bar_length
         self.length = self.stream.duration.quarterLength
         num_notes = 0
         polyphony = 0
         velocity = 0
         avg_pitch = 0
-        avg_tempo = 0
+        avg_tempo = None
         self.first_bar = stream.Stream()
         self.last_bar = stream.Stream()
         for element in self.stream:
@@ -41,9 +41,9 @@ class MusicalFeatures:
                 polyphony += 1
                 velocity += element.volume.velocity
                 avg_pitch += element.pitch.midi
-                if element.offset < bar_length:
+                if element.offset < self.bar_length:
                     self.first_bar.append(element)
-                if element.offset >= self.length - bar_length:
+                if element.offset >= self.length - self.bar_length:
                     self.last_bar.append(element)
             if isinstance(element, chord.Chord):
                 num_notes += 1
@@ -51,13 +51,13 @@ class MusicalFeatures:
                 velocity += element.volume.velocity
                 for n in element.notes:
                     avg_pitch += n.pitch.midi
-                if element.offset < bar_length:
+                if element.offset < self.bar_length:
                     self.first_bar.append(element)
-                if element.offset >= self.length - bar_length:
+                if element.offset >= self.length - self.bar_length:
                     self.last_bar.append(element)
             if isinstance(element, tempo.MetronomeMark):
                 avg_tempo = element.number
-        if avg_tempo == 0:
+        if not avg_tempo:
             avg_tempo = 120 # use 120 BPM as a default tempo
         
         self.notes_per_bar = round(num_notes / self.num_bars)
@@ -83,22 +83,27 @@ class MidiInterpolator:
         self.outfile = outfile
 
     def create_infilling(self) -> None:
-        self.output_stream = stream.Stream()
+        try:
+            self.output_stream = stream.Stream()
 
-        self.read_notes()
+            self.read_notes()
 
-        # Combine all streams and their transitions to a single stream
-        for i in range(len(self.streams) - 1):
-            self.current_stream = MusicalFeatures(self.streams[i])
-            self.next_stream = MusicalFeatures(self.streams[i + 1])
+            # Combine all streams and their transitions to a single stream
+            for i in range(len(self.streams) - 1):
+                self.current_stream = MusicalFeatures(self.streams[i])
+                self.next_stream = MusicalFeatures(self.streams[i + 1])
+                assert self.current_stream.bar_length == self.next_stream.bar_length, \
+                    "Different time signatures in given midi files, can not interpolate pieces."
 
-            self.output_stream.append(self.current_stream.stream)
+                self.output_stream.append(self.current_stream.stream)
 
-            self.generate_transition()
+                self.generate_transition()
 
-        self.output_stream.append(self.next_stream.stream)
+            self.output_stream.append(self.next_stream.stream)
 
-        self.output_stream.write('midi', self.outfile)
+            self.output_stream.write('midi', self.outfile)
+        except Exception as e:
+            print('Error while processing files', e)
 
     def read_notes(self) -> None:
         self.streams = []
@@ -119,7 +124,8 @@ class MidiInterpolator:
         interpolation_curves = self.generate_interpolation_curves()
         duration1 = self.current_stream.length
         duration2 = self.next_stream.length
-        start2 = duration1 + self.transition_length * 4.0
+        start2 = duration1 + self.transition_length * self.current_stream.bar_length
+
         for bar_nr in range(1, self.transition_length + 1):
             num_notes = self.calc(bar_nr, param='notes_per_bar')
             polyphony = self.calc(bar_nr, param='polyphony')
