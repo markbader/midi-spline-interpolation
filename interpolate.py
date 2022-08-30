@@ -123,7 +123,7 @@ class MidiInterpolator:
             polyphony = self.calc(bar_nr, param='polyphony')
             velocity = self.calc(bar_nr, param='velocity')
             avg_tempo = self.calc(bar_nr, param='avg_tempo')
-            duration = 4 / num_notes
+            duration = self.current_stream.bar_length / num_notes
             self.output_stream.append(tempo.MetronomeMark(number=avg_tempo))
             for _ in range(num_notes):
                 offset = self.output_stream.duration.quarterLength
