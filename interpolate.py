@@ -63,7 +63,7 @@ class MusicalFeatures:
 
         for element in self.stream:
             if isinstance(element, chord.Chord):
-                melody.append(note.Note(pitchName=element.notes[number].pitch, offset=element.offset, duration=element.duration))
+                melody.append(note.Note(pitchName=element.notes[min(number, len(element.notes) - 1)].pitch, offset=element.offset, duration=element.duration))
             elif isinstance(element, note.Note):
                 melody.append(element)
         return melody
