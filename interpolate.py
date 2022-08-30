@@ -41,20 +41,12 @@ class MusicalFeatures:
                 polyphony += 1
                 velocity += element.volume.velocity
                 avg_pitch += element.pitch.midi
-                if element.offset < self.bar_length:
-                    self.first_bar.append(element)
-                if element.offset >= self.length - self.bar_length:
-                    self.last_bar.append(element)
             if isinstance(element, chord.Chord):
                 num_notes += 1
                 polyphony += len(element.notes)
                 velocity += element.volume.velocity
                 for n in element.notes:
                     avg_pitch += n.pitch.midi
-                if element.offset < self.bar_length:
-                    self.first_bar.append(element)
-                if element.offset >= self.length - self.bar_length:
-                    self.last_bar.append(element)
             if isinstance(element, tempo.MetronomeMark):
                 avg_tempo = element.number
         if not avg_tempo:
