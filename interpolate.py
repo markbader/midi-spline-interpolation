@@ -135,7 +135,7 @@ class MidiInterpolator:
                     melody2 = round((interpolate.splev(position2, interpolation_curves[0]) - self.next_stream.avg_pitch) * melody_factor)
                     interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
 
-                    note_pitch = int(interpolate.splev(float(offset), interpolation_curves[0])) + interpolated_melody
+                    note_pitch = int(abs(interpolate.splev(float(offset), interpolation_curves[0]))) + interpolated_melody
                     white = [0,2,4,5,7,9,11]
                     if note_pitch % 12 not in white:
                         note_pitch += 1
@@ -151,12 +151,12 @@ class MidiInterpolator:
                         melody1 = round((interpolate.splev(position1, interpolation_curves[i]) - self.current_stream.avg_pitch) * melody_factor)
                         melody2 = round((interpolate.splev(position2, interpolation_curves[i]) - self.next_stream.avg_pitch) * melody_factor)
                         interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
-                        pitch = int(abs(interpolate.splev(float(offset), interpolation_curves[i]))) + interpolated_melody
+                        note_pitch = int(abs(interpolate.splev(float(offset), interpolation_curves[i]))) + interpolated_melody
                         white = [0, 2, 4, 5, 7, 9, 11]
-                        if pitch % 12 not in white:
-                            pitch += 1
+                        if note_pitch % 12 not in white:
+                            note_pitch += 1
 
-                        newNote = note.Note(pitch)
+                        newNote = note.Note(note_pitch)
                         newNote.volume.velocity = velocity
                         newNote.duration.quarterLength = duration
                         newChord.add(newNote)
