@@ -151,7 +151,7 @@ class MidiInterpolator:
                         melody1 = round((interpolate.splev(position1, interpolation_curves[i]) - self.current_stream.avg_pitch) * melody_factor)
                         melody2 = round((interpolate.splev(position2, interpolation_curves[i]) - self.next_stream.avg_pitch) * melody_factor)
                         interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
-                        pitch = int(interpolate.splev(float(offset), interpolation_curves[i])) + interpolated_melody
+                        pitch = int(abs(interpolate.splev(float(offset), interpolation_curves[i]))) + interpolated_melody
                         white = [0, 2, 4, 5, 7, 9, 11]
                         if pitch % 12 not in white:
                             pitch += 1
@@ -174,13 +174,13 @@ class MidiInterpolator:
 
             x_points, y_points = [], []
 
-            bar_length = self.current_stream.stream.timeSignature.barDuration.quarterLength
+            bar_length = self.current_stream.bar_length
 
             for note in begin_melody:
                 x_points.append(note.offset)
                 y_points.append(note.pitch.midi)
 
-            end_of_begin = 0.0 if not begin_melody.last() else begin_melody.last().offset + begin_melody.last().duration.quarterLength
+            end_of_begin = self.current_stream.length
             space = self.transition_length * bar_length
             begin_of_end = end_of_begin + space
 
@@ -188,7 +188,7 @@ class MidiInterpolator:
                 x_points.append(note.offset + begin_of_end)
                 y_points.append(note.pitch.midi)
 
-            curves.append(interpolate.splrep(x_points, y_points, s=25))
+            curves.append(interpolate.splrep(x_points, y_points, s=35))
         return curves
 
 if __name__ == "__main__":
