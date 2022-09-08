@@ -3,7 +3,7 @@ from scipy import interpolate
 import argparse
 from pathlib import Path
 
-from music21 import converter, note, chord, stream, interval, pitch, tempo
+from music21 import converter, note, chord, stream, interval, pitch, tempo, key
 
 class MusicalFeatures:
     def __init__(self, input_stream):
@@ -93,9 +93,20 @@ class MidiInterpolator:
 
             self.output_stream.append(self.next_stream.stream)
 
+            self.output_stream = self.remove_key_signatures(self.output_stream)
+
             self.output_stream.write('midi', self.outfile)
         except Exception as e:
             print('Error while processing files', e)
+
+    def remove_key_signatures(self, midi_stream):
+        new_stream = midi_stream.flatten()
+        for elem in new_stream:
+            if isinstance(elem, key.KeySignature) or isinstance(elem, key.Key):
+                elem_index = new_stream.index(elem)
+                new_stream.pop(elem_index)
+
+        return new_stream
 
     def read_notes(self) -> None:
         self.streams = []
@@ -111,8 +122,11 @@ class MidiInterpolator:
             x2 = getattr(self.next_stream, param)
         if x1 != None and x2 != None:
             return round(rel_position * x2 + (1 - rel_position) * x1)
+    
+    def clamp_to_pitch(self, number) -> int:
+        return max(10, min(117, int(number)))
 
-    def generate_transition(self, melody_factor: float=1.2):
+    def generate_transition(self, melody_factor: float=0.9):
         interpolation_curves = self.generate_interpolation_curves()
         duration1 = self.current_stream.length
         duration2 = self.next_stream.length
@@ -135,7 +149,7 @@ class MidiInterpolator:
                     melody2 = round((interpolate.splev(position2, interpolation_curves[0]) - self.next_stream.avg_pitch) * melody_factor)
                     interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
 
-                    note_pitch = int(abs(interpolate.splev(float(offset), interpolation_curves[0]))) + interpolated_melody
+                    note_pitch = self.clamp_to_pitch(interpolate.splev(float(offset), interpolation_curves[0]) + interpolated_melody)
                     white = [0,2,4,5,7,9,11]
                     if note_pitch % 12 not in white:
                         note_pitch += 1
@@ -151,7 +165,7 @@ class MidiInterpolator:
                         melody1 = round((interpolate.splev(position1, interpolation_curves[i]) - self.current_stream.avg_pitch) * melody_factor)
                         melody2 = round((interpolate.splev(position2, interpolation_curves[i]) - self.next_stream.avg_pitch) * melody_factor)
                         interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
-                        note_pitch = int(abs(interpolate.splev(float(offset), interpolation_curves[i]))) + interpolated_melody
+                        note_pitch = self.clamp_to_pitch(int(interpolate.splev(float(offset), interpolation_curves[i])) + interpolated_melody)
                         white = [0, 2, 4, 5, 7, 9, 11]
                         if note_pitch % 12 not in white:
                             note_pitch += 1
