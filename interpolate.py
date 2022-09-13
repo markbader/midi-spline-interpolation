@@ -69,16 +69,17 @@ class MusicalFeatures:
         return melody
 
 class MidiInterpolator:
-    def __init__(self, files: List[Path], length: int, outfile: Path):
+    def __init__(self, files: List[Path], length: int, outfile: Path, streams: List[stream.Stream]=None):
         self.filenames = files
         self.transition_length = length
         self.outfile = outfile
+        self.streams = streams
 
     def create_infilling(self) -> None:
         try:
             self.output_stream = stream.Stream()
-
-            self.read_notes()
+            if not self.streams:
+                self.read_notes()
 
             # Combine all streams and their transitions to a single stream
             for i in range(len(self.streams) - 1):
