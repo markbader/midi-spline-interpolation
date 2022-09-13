@@ -22,7 +22,7 @@ class MusicalFeatures:
         else:
             target_interval = interval.Interval(key.tonic, pitch.Pitch('A'))
 
-        self.stream: stream.Stream = input_stream.transpose(target_interval)
+        self.stream: stream.Stream = input_stream.transpose(target_interval).flatten()
 
     def extract_musical_features(self) -> None:
         self.bar_length = self.stream.timeSignature.barDuration.quarterLength
@@ -171,7 +171,7 @@ class MidiInterpolator:
                         melody1 = round((interpolate.splev(position1, interpolation_curves[i]) - self.current_stream.avg_pitch) * melody_factor)
                         melody2 = round((interpolate.splev(position2, interpolation_curves[i]) - self.next_stream.avg_pitch) * melody_factor)
                         interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
-                        note_pitch = self.clamp_to_pitch(int(interpolate.splev(float(offset), interpolation_curves[i])) + interpolated_melody)
+                        note_pitch = self.clamp_to_pitch(interpolate.splev(float(offset), interpolation_curves[i]) + interpolated_melody)
                         white = [0, 2, 4, 5, 7, 9, 11]
                         if note_pitch % 12 not in white:
                             note_pitch += 1
