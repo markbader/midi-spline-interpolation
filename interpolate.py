@@ -75,26 +75,31 @@ class MidiInterpolator:
         self.outfile = outfile
         self.streams = streams
 
+    def create_stream_infilling(self) -> stream.Stream:
+        self.output_stream = stream.Stream()
+        # Combine all streams and their transitions to a single stream
+        for i in range(len(self.streams) - 1):
+            self.current_stream = MusicalFeatures(self.streams[i])
+            self.next_stream = MusicalFeatures(self.streams[i + 1])
+            assert self.current_stream.bar_length == self.next_stream.bar_length, \
+                "Different time signatures in given midi files, can not interpolate pieces."
+
+            self.output_stream.append(self.current_stream.stream)
+
+            self.generate_transition()
+
+        self.output_stream.append(self.next_stream.stream)
+
+        self.output_stream = self.remove_key_signatures(self.output_stream)
+
+        return self.output_stream
+    
     def create_infilling(self) -> None:
         try:
-            self.output_stream = stream.Stream()
             if not self.streams:
                 self.read_notes()
 
-            # Combine all streams and their transitions to a single stream
-            for i in range(len(self.streams) - 1):
-                self.current_stream = MusicalFeatures(self.streams[i])
-                self.next_stream = MusicalFeatures(self.streams[i + 1])
-                assert self.current_stream.bar_length == self.next_stream.bar_length, \
-                    "Different time signatures in given midi files, can not interpolate pieces."
-
-                self.output_stream.append(self.current_stream.stream)
-
-                self.generate_transition()
-
-            self.output_stream.append(self.next_stream.stream)
-
-            self.output_stream = self.remove_key_signatures(self.output_stream)
+            self.create_stream_infilling()
 
             self.output_stream.write('midi', self.outfile)
         except Exception as e:
