@@ -69,7 +69,7 @@ class MusicalFeatures:
         return melody
 
 class MidiInterpolator:
-    def __init__(self, files: List[Path], length: int, outfile: Path, streams: List[stream.Stream]=None):
+    def __init__(self, files: List[Path]=None, length: int=4, outfile: Path=None, streams: List[stream.Stream]=None):
         self.filenames = files
         self.transition_length = length
         self.outfile = outfile
