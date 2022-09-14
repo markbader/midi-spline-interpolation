@@ -69,11 +69,12 @@ class MusicalFeatures:
         return melody
 
 class MidiInterpolator:
-    def __init__(self, files: List[Path]=None, length: int=4, outfile: Path=None, streams: List[stream.Stream]=None):
+    def __init__(self, files: List[Path]=None, length: int=4, outfile: Path=None, streams: List[stream.Stream]=None, note_variance: float=0.9):
         self.filenames = files
         self.transition_length = length
         self.outfile = outfile
         self.streams = streams
+        self.note_variance_factor = note_variance
 
     def create_stream_infilling(self) -> stream.Stream:
         self.output_stream = stream.Stream()
@@ -132,7 +133,7 @@ class MidiInterpolator:
     def clamp_to_pitch(self, number) -> int:
         return max(10, min(117, int(number)))
 
-    def generate_transition(self, melody_factor: float=0.9):
+    def generate_transition(self):
         interpolation_curves = self.generate_interpolation_curves()
         duration1 = self.current_stream.length
         duration2 = self.next_stream.length
@@ -151,8 +152,8 @@ class MidiInterpolator:
                 position2 = start2 + (start2 + offset) % duration2
                 if polyphony <= 1:
                     # interpolate pitch from spline function and map it to white key
-                    melody1 = round((interpolate.splev(position1, interpolation_curves[0]) - self.current_stream.avg_pitch) * melody_factor)
-                    melody2 = round((interpolate.splev(position2, interpolation_curves[0]) - self.next_stream.avg_pitch) * melody_factor)
+                    melody1 = round((interpolate.splev(position1, interpolation_curves[0]) - self.current_stream.avg_pitch) * self.note_variance_factor)
+                    melody2 = round((interpolate.splev(position2, interpolation_curves[0]) - self.next_stream.avg_pitch) * self.note_variance_factor)
                     interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
 
                     note_pitch = self.clamp_to_pitch(interpolate.splev(float(offset), interpolation_curves[0]) + interpolated_melody)
@@ -168,8 +169,8 @@ class MidiInterpolator:
                     newChord = chord.Chord()
                     for i in range(polyphony):
                         # interpolate pitch from spline function and map it to white key
-                        melody1 = round((interpolate.splev(position1, interpolation_curves[i]) - self.current_stream.avg_pitch) * melody_factor)
-                        melody2 = round((interpolate.splev(position2, interpolation_curves[i]) - self.next_stream.avg_pitch) * melody_factor)
+                        melody1 = round((interpolate.splev(position1, interpolation_curves[i]) - self.current_stream.avg_pitch) * self.note_variance_factor)
+                        melody2 = round((interpolate.splev(position2, interpolation_curves[i]) - self.next_stream.avg_pitch) * self.note_variance_factor)
                         interpolated_melody = self.calc(bar_nr, x1=melody1, x2=melody2)
                         note_pitch = self.clamp_to_pitch(interpolate.splev(float(offset), interpolation_curves[i]) + interpolated_melody)
                         white = [0, 2, 4, 5, 7, 9, 11]
@@ -214,12 +215,31 @@ class MidiInterpolator:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='')
 
-    parser.add_argument('--files', type=Path, nargs='+', default=["begin_orig.mid", "end_orig.mid"])
-    parser.add_argument('--outfile', type=Path, default='result.mid')
-    parser.add_argument('--length', type=int, default=4)
+    parser.add_argument(
+        '--files', 
+        type=Path, 
+        nargs='+', 
+        default=["begin_orig.mid", "end_orig.mid"])
+
+    parser.add_argument(
+        '--outfile', 
+        type=Path, 
+        default='result.mid')
+
+    parser.add_argument(
+        '--length', 
+        type=int, 
+        default=7)
+
+    parser.add_argument(
+        '--note_variance', 
+        type=float, 
+        default=0.9)
 
     args = parser.parse_args()
 
-    midi_interpolator = MidiInterpolator(args.files, args.length, args.outfile)
+    midi_interpolator = MidiInterpolator(
+        files=args.files, length=args.length, 
+        outfile=args.outfile, note_variance=args.note_variance)
     midi_interpolator.create_infilling()
     
