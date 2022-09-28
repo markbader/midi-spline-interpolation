@@ -2,6 +2,9 @@ from typing import List
 from scipy import interpolate
 import argparse
 from pathlib import Path
+# import numpy as np
+
+# import matplotlib.pyplot as plt
 
 from music21 import converter, note, chord, stream, interval, pitch, tempo, key
 
@@ -60,12 +63,17 @@ class MusicalFeatures:
 
     def extract_melody(self, number: int) -> stream.Stream:
         melody = stream.Stream()
+        last_note = None
 
         for element in self.stream:
             if isinstance(element, chord.Chord):
                 melody.append(note.Note(pitchName=element.notes[min(number, len(element.notes) - 1)].pitch, offset=element.offset, duration=element.duration))
+                last_note = note.Note(pitchName=element.notes[min(number, len(element.notes) - 1)].pitch, offset=element.offset + element.duration.quarterLength)
             elif isinstance(element, note.Note):
                 melody.append(element)
+                last_note = note.Note(pitchName=element.pitch, offset=element.offset + element.duration.quarterLength)
+        if last_note:
+            melody.append(last_note)
         return melody
 
 class MidiInterpolator:
@@ -190,6 +198,8 @@ class MidiInterpolator:
         max_polyphony = max(self.current_stream.polyphony, self.next_stream.polyphony)
         curves = []
         for i in range(max_polyphony):
+            # fig, ax = plt.subplots(figsize=(12, 4))
+            # xs = np.arange(0.0, 45.0, 0.1)
             begin_melody = self.current_stream.melodies[min(i, len(self.current_stream.melodies) - 1)]
             end_melody = self.next_stream.melodies[min(i, len(self.next_stream.melodies) - 1)]
 
@@ -210,6 +220,9 @@ class MidiInterpolator:
                 y_points.append(note.pitch.midi)
 
             curves.append(interpolate.splrep(x_points, y_points, s=35))
+            # ax.plot(x_points, y_points, 'o')
+            # ax.plot(xs, interpolate.splev(xs, curves[-1]))
+            # plt.show()
         return curves
 
 if __name__ == "__main__":
